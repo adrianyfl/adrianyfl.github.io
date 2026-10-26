@@ -1,0 +1,9 @@
+[workspace]
+members = ["site", "fx"]
+resolver = "3"
+
+# Profiles only take effect in the workspace root; Cargo ignores them in member crates.
+[profile.release]
+opt-level = "z"     # optimize for size (smaller .wasm download)
+lto = true          # link-time optimization across all crates
+codegen-units = 1   # slower compile, better optimization

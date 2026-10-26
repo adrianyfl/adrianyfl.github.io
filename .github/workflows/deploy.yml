@@ -1,0 +1,91 @@
+# Builds the Leptos site with Trunk and publishes it to GitHub Pages.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # adds a "Run workflow" button in the Actions tab
+
+# The default GITHUB_TOKEN gets only what it needs:
+# read the repo, write to Pages, and mint an OIDC token that deploy-pages uses
+# to prove the deploy came from this workflow.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time. A newer push waits in line instead of
+# cancelling a deploy that is halfway done.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+env:
+  TRUNK_VERSION: v0.22.0
+  # SHA-256 of trunk-x86_64-unknown-linux-musl.tar.gz for the version above.
+  # Update both together when bumping Trunk.
+  TRUNK_SHA256: 7210c507cea0ee8c9296883802ce7ce50c08a38e7ed67993c2ea41ffddb89b79
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Get the repo contents onto the runner.
+      - uses: actions/checkout@v7
+
+      # Install stable Rust plus the wasm32 target that browsers run.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      # Cache ~/.cargo and target/ between runs so dependencies
+      # aren't recompiled every time. The workspace root holds target/.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      # Download a prebuilt Trunk binary (seconds) instead of
+      # `cargo install trunk` (minutes). The checksum check fails the
+      # build if the download is not exactly the pinned release.
+      - name: Install Trunk
+        run: |
+          url="https://github.com/trunk-rs/trunk/releases/download/${TRUNK_VERSION}/trunk-x86_64-unknown-linux-musl.tar.gz"
+          curl -sSfL "$url" -o trunk.tar.gz
+          echo "${TRUNK_SHA256}  trunk.tar.gz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf trunk.tar.gz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          rm trunk.tar.gz
+
+      # Compile to wasm, run wasm-bindgen and wasm-opt, and write
+      # everything to site/dist/.
+      - name: Build site
+        working-directory: site
+        run: trunk build --release
+
+      # GitHub Pages serves 404.html for any path it has no file for.
+      # Making it a copy of index.html means a deep link like /projects
+      # loads the app, and the Leptos router shows the right page.
+      - name: Add SPA fallback
+        run: cp site/dist/index.html site/dist/404.html
+
+      # Reads the repo's Pages settings and enables Pages for Actions deploys.
+      - uses: actions/configure-pages@v6
+
+      # Packages site/dist/ as the artifact that deploy-pages publishes.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # The github-pages environment shows the live URL on the run page
+    # and in the repo's Environments list.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Publishes the uploaded artifact to GitHub Pages.
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adrian Luo</title>
+
+    <!-- Compile this crate (site/Cargo.toml) to wasm, generate the JS glue with
+         wasm-bindgen, and inject the loader script. data-wasm-opt="z" runs
+         wasm-opt -Oz on release builds; Trunk downloads wasm-opt itself. -->
+    <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" />
+
+    <!-- Copy style.css into dist/ with a content hash in its name and link it. -->
+    <link data-trunk rel="css" href="style.css" />
+
+    <!-- Copy CNAME into dist/ unchanged so every deploy keeps the custom domain. -->
+    <link data-trunk rel="copy-file" href="CNAME" />
+  </head>
+  <body></body>
+</html>
